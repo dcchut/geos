@@ -20,7 +20,7 @@ impl<'a> TryInto<Geometry<f64>> for GGeom<'a> {
             .items
             .iter()
             .next()
-            .ok_or(Error::ConversionError("invalid wkt".into()))?;
+            .ok_or_else(|| Error::ConversionError("invalid wkt".into()))?;
 
         try_into_geometry(o)
             .map_err(|e| Error::ConversionError(format!("impossible to built from wkt: {}", e)))

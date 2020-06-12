@@ -37,7 +37,7 @@ impl<'a, T: Borrow<Point<f64>>> TryInto<GGeom<'a>> for &'a [T] {
 
     fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
         let geom_points = self
-            .into_iter()
+            .iter()
             .map(|p| p.borrow().try_into())
             .collect::<Result<Vec<_>, _>>()?;
 
