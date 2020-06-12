@@ -45,8 +45,7 @@ fn main() {
     fun().unwrap();
 }
 
-
 #[cfg(not(feature = "geo"))]
 fn main() {
-    eprintln!("You need to enable the \"geo\" feature to run this example!", );
+    eprintln!("You need to enable the \"geo\" feature to run this example!",);
 }

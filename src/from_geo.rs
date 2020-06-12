@@ -1,14 +1,9 @@
 use crate::{CoordDimensions, CoordSeq, Geometry as GGeom};
 use error::Error;
-use geo_types::{Coordinate, LineString, MultiPolygon, Point, Polygon};
+use geo_types::{Coordinate, LineString, MultiLineString, MultiPolygon, Point, Polygon};
 use std;
 use std::borrow::Borrow;
-
-// define our own TryInto while the std trait is not stable
-pub trait TryInto<T> {
-    type Err;
-    fn try_into(self) -> Result<T, Self::Err>;
-}
+use std::convert::TryInto;
 
 fn create_coord_seq_from_vec<'a>(coords: &'a [Coordinate<f64>]) -> Result<CoordSeq, Error> {
     create_coord_seq(coords.iter(), coords.len())
@@ -18,8 +13,8 @@ fn create_coord_seq<'a, 'b, It>(points: It, len: usize) -> Result<CoordSeq<'b>, 
 where
     It: Iterator<Item = &'a Coordinate<f64>>,
 {
-    let mut coord_seq = CoordSeq::new(len as u32, CoordDimensions::TwoD)
-                                 .expect("failed to create CoordSeq");
+    let mut coord_seq =
+        CoordSeq::new(len as u32, CoordDimensions::TwoD).expect("failed to create CoordSeq");
     for (i, p) in points.enumerate() {
         coord_seq.set_x(i, p.x)?;
         coord_seq.set_y(i, p.y)?;
@@ -28,9 +23,9 @@ where
 }
 
 impl<'a> TryInto<GGeom<'a>> for &'a Point<f64> {
-    type Err = Error;
+    type Error = Error;
 
-    fn try_into(self) -> Result<GGeom<'a>, Self::Err> {
+    fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
         let coord_seq = create_coord_seq(std::iter::once(&self.0), 1)?;
 
         GGeom::create_point(coord_seq)
@@ -38,9 +33,9 @@ impl<'a> TryInto<GGeom<'a>> for &'a Point<f64> {
 }
 
 impl<'a, T: Borrow<Point<f64>>> TryInto<GGeom<'a>> for &'a [T] {
-    type Err = Error;
+    type Error = Error;
 
-    fn try_into(self) -> Result<GGeom<'a>, Self::Err> {
+    fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
         let geom_points = self
             .into_iter()
             .map(|p| p.borrow().try_into())
@@ -51,12 +46,27 @@ impl<'a, T: Borrow<Point<f64>>> TryInto<GGeom<'a>> for &'a [T] {
 }
 
 impl<'a> TryInto<GGeom<'a>> for &'a LineString<f64> {
-    type Err = Error;
+    type Error = Error;
 
-    fn try_into(self) -> Result<GGeom<'a>, Self::Err> {
+    fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
         let coord_seq = create_coord_seq_from_vec(self.0.as_slice())?;
 
         GGeom::create_line_string(coord_seq)
+    }
+}
+
+impl<'a> TryInto<GGeom<'a>> for &'a MultiLineString<f64> {
+    type Error = Error;
+
+    fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
+        let linestrings = self
+            .0
+            .as_slice()
+            .iter()
+            .map(|i| i.try_into())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        GGeom::create_multiline_string(linestrings)
     }
 }
 
@@ -67,9 +77,9 @@ struct LineRing<'a>(&'a LineString<f64>);
 /// Convert a geo_types::LineString to a geos LinearRing
 /// a LinearRing should be closed so cloase the geometry if needed
 impl<'a, 'b> TryInto<GGeom<'b>> for &'a LineRing<'b> {
-    type Err = Error;
+    type Error = Error;
 
-    fn try_into(self) -> Result<GGeom<'b>, Self::Err> {
+    fn try_into(self) -> Result<GGeom<'b>, Self::Error> {
         let points = &(self.0).0;
         let nb_points = points.len();
         if nb_points > 0 && nb_points < 3 {
@@ -96,16 +106,16 @@ impl<'a, 'b> TryInto<GGeom<'b>> for &'a LineRing<'b> {
 }
 
 impl<'a> TryInto<GGeom<'a>> for &'a Polygon<f64> {
-    type Err = Error;
+    type Error = Error;
 
-    fn try_into(self) -> Result<GGeom<'a>, Self::Err> {
+    fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
         let ring = LineRing(self.exterior());
-        let geom_exterior: GGeom = ring.try_into()?;
+        let geom_exterior = (&ring).try_into()?;
 
         let interiors: Vec<_> = self
             .interiors()
             .iter()
-            .map(|i| LineRing(i).try_into())
+            .map(|i| (&LineRing(i)).try_into())
             .collect::<Result<Vec<_>, _>>()?;
 
         GGeom::create_polygon(geom_exterior, interiors)
@@ -113,9 +123,9 @@ impl<'a> TryInto<GGeom<'a>> for &'a Polygon<f64> {
 }
 
 impl<'a> TryInto<GGeom<'a>> for &'a MultiPolygon<f64> {
-    type Err = Error;
+    type Error = Error;
 
-    fn try_into(self) -> Result<GGeom<'a>, Self::Err> {
+    fn try_into(self) -> Result<GGeom<'a>, Self::Error> {
         let polygons: Vec<_> = self
             .0
             .iter()
@@ -130,7 +140,7 @@ impl<'a> TryInto<GGeom<'a>> for &'a MultiPolygon<f64> {
 mod test {
     use super::GGeom;
     use super::LineRing;
-    use from_geo::TryInto;
+    use super::TryInto;
     use geo_types::{Coordinate, LineString, MultiPolygon, Polygon};
 
     fn coords(tuples: Vec<(f64, f64)>) -> Vec<Coordinate<f64>> {

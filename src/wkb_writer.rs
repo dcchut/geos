@@ -1,11 +1,11 @@
-use enums::{ByteOrder, OutputDimension};
-use crate::{ContextHandle, Geometry, GResult, AsRaw, ContextHandling, ContextInteractions};
+use crate::{AsRaw, ContextHandle, ContextHandling, ContextInteractions, GResult, Geometry};
+use c_vec::CVec;
 use context_handle::PtrWrap;
+use enums::TryFrom;
+use enums::{ByteOrder, OutputDimension};
+use error::Error;
 use geos_sys::*;
 use std::sync::Arc;
-use error::Error;
-use enums::TryFrom;
-use c_vec::CVec;
 
 /// The `WKBWriter` type is used to generate `HEX` or `WKB` formatted output from [`Geometry`].
 ///
@@ -88,9 +88,15 @@ impl<'a> WKBWriter<'a> {
             } else {
                 String::new()
             };
-            return Err(Error::NoConstructionFromNullPtr(format!("WKBWriter::{}{}", caller, extra)));
+            return Err(Error::NoConstructionFromNullPtr(format!(
+                "WKBWriter::{}{}",
+                caller, extra
+            )));
         }
-        Ok(WKBWriter { ptr: PtrWrap(ptr), context })
+        Ok(WKBWriter {
+            ptr: PtrWrap(ptr),
+            context,
+        })
     }
 
     /// Writes out the given `geometry` as WKB format.
@@ -110,12 +116,17 @@ impl<'a> WKBWriter<'a> {
     pub fn write_wkb(&self, geometry: &Geometry<'_>) -> GResult<CVec<u8>> {
         let mut size = 0;
         unsafe {
-            let ptr = GEOSWKBWriter_write_r(self.get_raw_context(), self.as_raw(),
-                                            geometry.as_raw(), &mut size);
+            let ptr = GEOSWKBWriter_write_r(
+                self.get_raw_context(),
+                self.as_raw(),
+                geometry.as_raw(),
+                &mut size,
+            );
             if ptr.is_null() {
                 Err(Error::NoConstructionFromNullPtr(
-                    "WKBWriter::write_wkb failed: GEOSWKBWriter_writeHEX_r returned null pointer".to_owned())
-                )
+                    "WKBWriter::write_wkb failed: GEOSWKBWriter_writeHEX_r returned null pointer"
+                        .to_owned(),
+                ))
             } else {
                 Ok(CVec::new(ptr, size as _))
             }
@@ -140,12 +151,17 @@ impl<'a> WKBWriter<'a> {
     pub fn write_hex(&self, geometry: &Geometry<'_>) -> GResult<CVec<u8>> {
         let mut size = 0;
         unsafe {
-            let ptr = GEOSWKBWriter_writeHEX_r(self.get_raw_context(), self.as_raw(),
-                                               geometry.as_raw(), &mut size);
+            let ptr = GEOSWKBWriter_writeHEX_r(
+                self.get_raw_context(),
+                self.as_raw(),
+                geometry.as_raw(),
+                &mut size,
+            );
             if ptr.is_null() {
                 Err(Error::NoConstructionFromNullPtr(
-                    "WKBWriter::write_hex failed: GEOSWKBWriter_writeHEX_r returned null pointer".to_owned())
-                )
+                    "WKBWriter::write_hex failed: GEOSWKBWriter_writeHEX_r returned null pointer"
+                        .to_owned(),
+                ))
             } else {
                 Ok(CVec::new(ptr, size as _))
             }
@@ -178,8 +194,11 @@ impl<'a> WKBWriter<'a> {
     /// ```
     pub fn set_output_dimension(&mut self, dimension: OutputDimension) {
         unsafe {
-            GEOSWKBWriter_setOutputDimension_r(self.get_raw_context(), self.as_raw(),
-                                               dimension.into())
+            GEOSWKBWriter_setOutputDimension_r(
+                self.get_raw_context(),
+                self.as_raw(),
+                dimension.into(),
+            )
         }
     }
 
@@ -258,7 +277,9 @@ impl<'a> WKBWriter<'a> {
         unsafe {
             let out = GEOSWKBWriter_getIncludeSRID_r(self.get_raw_context(), self.as_raw());
             if out < 0 {
-                Err(Error::GenericError("GEOSWKBWriter_getIncludeSRID_r failed".to_owned()))
+                Err(Error::GenericError(
+                    "GEOSWKBWriter_getIncludeSRID_r failed".to_owned(),
+                ))
             } else {
                 Ok(out != 0)
             }
